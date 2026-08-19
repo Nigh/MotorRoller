@@ -21,6 +21,9 @@
     "src/**/*.js",
     "src/**/*.svelte"
   ],
+  "exclude": [
+    "src/wave.check.ts"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"

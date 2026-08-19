@@ -11,16 +11,22 @@ import (
 )
 
 const (
-	waveCapacity = 120 // ~2s at 60 Hz emit
-	emitInterval = time.Second / 50
+	emitInterval = time.Millisecond * 10 // 100 Hz UI push; each push may carry a 1 kHz burst
+	maxPending   = 64
 )
 
-// Snapshot is a throttled telemetry push for the UI.
+// TelemPoint is one USB telemetry sample for the waveform strip.
+type TelemPoint struct {
+	Seq   uint16  `json:"seq"`
+	DutyA float64 `json:"dutyA"`
+	DutyB float64 `json:"dutyB"`
+	DutyC float64 `json:"dutyC"`
+}
+
+// Snapshot is a throttled UI push: latest status + dense points since last emit.
 type Snapshot struct {
 	Telemetry
-	DutyAHist []float64 `json:"dutyAHist"`
-	DutyBHist []float64 `json:"dutyBHist"`
-	DutyCHist []float64 `json:"dutyCHist"`
+	Points []TelemPoint `json:"points"`
 }
 
 // EmitFn is called with UI snapshots (~50 Hz).
@@ -40,13 +46,11 @@ type Session struct {
 
 	emit EmitFn
 
-	// ring for waveform (written on read loop, copied on emit)
-	histMu sync.Mutex
-	aHist  []float64
-	bHist  []float64
-	cHist  []float64
-	latest Telemetry
-	have   bool
+	// latest telemetry for throttled emit
+	histMu  sync.Mutex
+	latest  Telemetry
+	have    bool
+	pending []TelemPoint
 }
 
 // Connect opens the device identified by "bus:addr" and starts the read loop.
@@ -168,16 +172,13 @@ func Connect(id string, emit EmitFn) (*Session, error) {
 	}
 
 	s := &Session{
-		ctx:   usbCtx,
-		dev:   dev,
-		intf:  claimed,
-		done:  done,
-		in:    inEP,
-		out:   outEP,
-		emit:  emit,
-		aHist: make([]float64, 0, waveCapacity),
-		bHist: make([]float64, 0, waveCapacity),
-		cHist: make([]float64, 0, waveCapacity),
+		ctx:  usbCtx,
+		dev:  dev,
+		intf: claimed,
+		done: done,
+		in:   inEP,
+		out:  outEP,
+		emit: emit,
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -218,6 +219,12 @@ func (s *Session) readLoop(ctx context.Context) {
 		s.histMu.Lock()
 		s.latest = t
 		s.have = true
+		s.pending = append(s.pending, TelemPoint{
+			Seq: t.Seq, DutyA: t.DutyA, DutyB: t.DutyB, DutyC: t.DutyC,
+		})
+		if len(s.pending) > maxPending {
+			s.pending = append([]TelemPoint(nil), s.pending[len(s.pending)-maxPending/2:]...)
+		}
 		s.histMu.Unlock()
 	}
 }
@@ -240,29 +247,17 @@ func (s *Session) emitLoop(ctx context.Context) {
 				continue
 			}
 			t := s.latest
-			// ponytail: downsample to emit rate (~50 Hz); ceiling ~2s window — bump waveCapacity for longer
-			s.aHist = appendRing(s.aHist, t.DutyA, waveCapacity)
-			s.bHist = appendRing(s.bHist, t.DutyB, waveCapacity)
-			s.cHist = appendRing(s.cHist, t.DutyC, waveCapacity)
-			snap := Snapshot{
-				Telemetry: t,
-				DutyAHist: append([]float64(nil), s.aHist...),
-				DutyBHist: append([]float64(nil), s.bHist...),
-				DutyCHist: append([]float64(nil), s.cHist...),
-			}
+			pts := s.pending
+			s.pending = nil
 			s.histMu.Unlock()
-			s.emit(snap)
+			if len(pts) == 0 {
+				pts = []TelemPoint{{
+					Seq: t.Seq, DutyA: t.DutyA, DutyB: t.DutyB, DutyC: t.DutyC,
+				}}
+			}
+			s.emit(Snapshot{Telemetry: t, Points: pts})
 		}
 	}
-}
-
-func appendRing(hist []float64, v float64, capN int) []float64 {
-	if len(hist) < capN {
-		return append(hist, v)
-	}
-	copy(hist, hist[1:])
-	hist[capN-1] = v
-	return hist
 }
 
 // SendCommand writes a single-byte opcode (or opcode + payload) on Bulk OUT.
