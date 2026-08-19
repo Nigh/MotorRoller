@@ -69,4 +69,16 @@ func TestModePos(t *testing.T) {
 	if ModeName(9) != "MOTOR_POS" {
 		t.Fatal(ModeName(9))
 	}
+	if ModeName(10) != "MOTOR_STRESS" {
+		t.Fatal(ModeName(10))
+	}
+}
+
+func TestCmdUpload(t *testing.T) {
+	if CmdUpload != 0x7F {
+		t.Fatalf("UPLOAD opcode %02x", CmdUpload)
+	}
+	if CmdStress != 0x07 {
+		t.Fatalf("STRESS opcode %02x", CmdStress)
+	}
 }

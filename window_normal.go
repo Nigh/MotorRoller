@@ -11,6 +11,6 @@ func configureWindow(app *application.App) {
 		Title:            "MotorRoller",
 		Width:            1000,
 		Height:           700,
-		BackgroundColour: application.NewRGB(27, 38, 54),
+		BackgroundColour: application.NewRGB(36, 36, 36), // xianii --color-base-100
 	})
 }

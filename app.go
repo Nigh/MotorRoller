@@ -76,7 +76,7 @@ func (a *AppService) ConnectedID() string {
 	return a.connID
 }
 
-// SendCommand sends a TinyKnob opcode by name: START, STOP, SPRING, SPIN, TEST.
+// SendCommand sends a TinyKnob opcode by name: START, STOP, SPRING, SPIN, TEST, STRESS, UPLOAD.
 func (a *AppService) SendCommand(name string) error {
 	var cmd byte
 	switch name {
@@ -90,6 +90,10 @@ func (a *AppService) SendCommand(name string) error {
 		cmd = usb.CmdSpin
 	case "TEST":
 		cmd = usb.CmdTest
+	case "STRESS":
+		cmd = usb.CmdStress
+	case "UPLOAD":
+		cmd = usb.CmdUpload
 	default:
 		return fmt.Errorf("unknown command %q", name)
 	}
@@ -97,7 +101,14 @@ func (a *AppService) SendCommand(name string) error {
 	if err != nil {
 		return err
 	}
-	return sess.SendCommand(cmd)
+	if err := sess.SendCommand(cmd); err != nil {
+		return err
+	}
+	if name == "UPLOAD" {
+		// Device reboots into UF2; drop the dead session.
+		a.Disconnect()
+	}
+	return nil
 }
 
 // Goto streams MOTOR_POS setpoint (angle in milliradians, unwrapped).
