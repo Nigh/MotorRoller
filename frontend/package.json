@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check:wave": "node --experimental-strip-types src/wave.check.ts"
   },
   "dependencies": {
     "@wailsio/runtime": "^3.0.0-alpha.79"

@@ -21,6 +21,16 @@ func (a *AppService) setApp(app *application.App) {
 	a.app = app
 }
 
+func (a *AppService) sessionOrErr() (*usb.Session, error) {
+	a.mu.Lock()
+	sess := a.session
+	a.mu.Unlock()
+	if sess == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+	return sess, nil
+}
+
 // ListDevices returns TinyKnob VID/PID matches.
 func (a *AppService) ListDevices() ([]usb.DeviceInfo, error) {
 	return usb.ListDevices()
@@ -83,13 +93,42 @@ func (a *AppService) SendCommand(name string) error {
 	default:
 		return fmt.Errorf("unknown command %q", name)
 	}
-	a.mu.Lock()
-	sess := a.session
-	a.mu.Unlock()
-	if sess == nil {
-		return fmt.Errorf("not connected")
+	sess, err := a.sessionOrErr()
+	if err != nil {
+		return err
 	}
 	return sess.SendCommand(cmd)
+}
+
+// Goto streams MOTOR_POS setpoint (angle in milliradians, unwrapped).
+func (a *AppService) Goto(angleMrad int32) error {
+	sess, err := a.sessionOrErr()
+	if err != nil {
+		return err
+	}
+	pkt := usb.PackGoto(angleMrad)
+	return sess.SendCommand(pkt[0], pkt[1:]...)
+}
+
+// SetK sets spring stiffness: K = kx10/10, kx10 clamped to 0…80.
+func (a *AppService) SetK(kx10 uint8) error {
+	if kx10 > 80 {
+		kx10 = 80
+	}
+	sess, err := a.sessionOrErr()
+	if err != nil {
+		return err
+	}
+	return sess.SendCommand(usb.CmdSetK, kx10)
+}
+
+// SetRest sets spring rest angle to the current encoder position.
+func (a *AppService) SetRest() error {
+	sess, err := a.sessionOrErr()
+	if err != nil {
+		return err
+	}
+	return sess.SendCommand(usb.CmdSetRest)
 }
 
 func (a *AppService) IsFrameless() bool {
