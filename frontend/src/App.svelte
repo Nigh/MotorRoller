@@ -1,0 +1,185 @@
+<script lang="ts">
+	import { Greet, LogPrintln, IsFrameless } from "../bindings/wails-demo/appservice.js"
+	import { Application } from "@wailsio/runtime"
+	import avatar from "./assets/images/onimai.png"
+	const initText = "Please enter your name below 👇"
+	let resultText: string = $state(initText)
+	let name: string = $state("")
+	let inputStyle: string = $state("input-primary")
+	let avatarImg: string = $state(avatar)
+	let frameless: boolean = $state(false)
+	let hovered: boolean = $state(false)
+
+	IsFrameless().then((v) => {
+		frameless = v
+		if (v) {
+			document.documentElement.style.backgroundColor = "transparent"
+		}
+	})
+
+	function greet(): void {
+		if (name.length > 0) {
+			inputStyle = "input-primary"
+			Greet(name).then((result) => (resultText = result))
+		} else {
+			resultText = initText
+			inputStyle = "input-error"
+		}
+	}
+
+	function onFileInputChange(event: Event): void {
+		const input = event.target as HTMLInputElement
+		const file = input.files?.[0]
+		if (file) {
+			LogPrintln(file.name)
+			avatarImg = URL.createObjectURL(file)
+		}
+	}
+
+	function reset(): void {
+		avatarImg = avatar
+		resultText = initText
+		inputStyle = "input-primary"
+		name = ""
+	}
+</script>
+
+<main>
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="window-container"
+		class:frameless
+		class:hovered
+		onmouseenter={() => hovered = true}
+		onmouseleave={() => hovered = false}
+		style={frameless && hovered ? "--wails-draggable:drag" : ""}
+	>
+	{#if frameless}
+		<button class="exit-btn" class:visible={hovered} onclick={() => Application.Quit()}>✕</button>
+	{/if}
+	<div class="flex flex-col justify-center w-screen h-screen pointer-events-auto">
+		<div class="justify-center">
+			<div class="text-center">
+				<button
+					class="avatar mb-8 cursor-pointer"
+					onclick={() => {
+						const fileInput = document.getElementById("fileInput")
+						if (fileInput !== null) {
+							fileInput.click()
+						}
+					}}
+					type="button"
+				>
+					<div
+						class="ring ring-offset-4 ring-offset-base-100 ring-primary w-24 rounded-full"
+					>
+						<div class="overlay">Change Avatar</div>
+						<img alt="" src={avatarImg} />
+					</div>
+				</button>
+				<input
+					type="file"
+					id="fileInput"
+					accept="image/*"
+					class="hidden"
+					onchange={onFileInputChange}
+				/>
+			</div>
+			<h1 class="text-3xl font-bold">
+				Wails-Svelte-DaisyUI-Tailwindcss<br />Template
+			</h1>
+			<div class="result mt-4" id="result">{resultText}</div>
+			<div class="flex w-full justify-center">
+				<label
+					class="input input-bordered {inputStyle} flex grow items-center gap-2 max-w-[400px]"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						viewBox="0 0 16 16"
+						fill="currentColor"
+						class="h-4 w-4 opacity-70"
+					>
+						<path
+							d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12.735 14c.618 0 1.093-.561.872-1.139a6.002 6.002 0 0 0-11.215 0c-.22.578.254 1.139.872 1.139h9.47Z"
+						/>
+					</svg>
+					<input
+						type="text"
+						class="grow"
+						bind:value={name}
+						placeholder="Username"
+					/>
+				</label>
+			</div>
+			<div class="flex w-full mt-4 justify-center">
+				<div class="flex max-w-[400px] grow gap-4">
+					<button class="btn btn-success grow" onclick={greet}
+						>Greet</button
+					>
+					<button class="btn btn-warning grow" onclick={reset}
+						>Reset</button
+					>
+				</div>
+			</div>
+		</div>
+	</div>
+	</div>
+</main>
+
+<style>
+	.window-container {
+		width: 100vw;
+		height: 100vh;
+		transition: background 0.2s;
+	}
+	.window-container.hovered {
+		background: rgba(0, 0, 0, 0.35);
+	}
+
+	.exit-btn {
+		position: fixed;
+		top: 4px;
+		right: 4px;
+		width: 32px;
+		height: 32px;
+		border: none;
+		background: transparent;
+		color: white;
+		font-size: 16px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+		opacity: 0;
+		transition: opacity 0.2s;
+		pointer-events: none;
+	}
+	.exit-btn.visible {
+		opacity: 1;
+		pointer-events: auto;
+	}
+	.exit-btn:hover {
+		background: rgba(255, 0, 0, 0.6);
+	}
+
+	.overlay {
+		position: absolute;
+		user-select: none;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(0, 0, 0, 0.5);
+		color: white;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 50%;
+		opacity: 0;
+		transition: opacity 0.3s;
+	}
+	.avatar:hover .overlay {
+		opacity: 1;
+	}
+</style>
