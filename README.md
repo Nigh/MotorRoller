@@ -9,7 +9,7 @@ Built with [Wails v3](https://wails.io/) + Svelte + DaisyUI + Tailwind. Speaks t
 - Auto-enumerate TinyKnob devices; pick and connect when several are present
 - Real-time phase A/B/C duty values and scrolling waveforms
 - Encoder angle (mrad / rad / deg) with a marked dial
-- Live motor mode label and START / STOP / SPRING / SPIN / TEST commands
+- Mode buttons (incl. `STRESS` burn-in) highlight the live mode; BOOTLOADER is two-click
 - Dial tracking (`GOTO` / `MOTOR_POS`): drag or scroll wheel to stream setpoints
 - Spring controls: `SET_K` (stiffness) and `SET_REST`
 

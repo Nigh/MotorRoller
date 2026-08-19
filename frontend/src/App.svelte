@@ -54,7 +54,7 @@
 	let statusMsg: string = $state("")
 	let busy: boolean = $state(false)
 
-	let modeName: string = $state("—")
+	let mode = $state(-1)
 	let angleMrad: number = $state(0)
 	let dutyA: number = $state(0)
 	let dutyB: number = $state(0)
@@ -78,11 +78,24 @@
 	let gotoPending: number | null = null
 	let gotoTimer: ReturnType<typeof setTimeout> | null = null
 	let ignoreTrackPress = false
+	let bootloaderArmed = $state(false)
 
 	let waveCanvas: HTMLCanvasElement | undefined = $state()
 	let dialSvg: SVGSVGElement | undefined = $state()
 
-	const cmds = ["START", "STOP", "SPRING", "SPIN", "TEST"] as const
+	const modes = [
+		{ id: 0, name: "MOTOR_IDLE", label: "IDLE", cmd: "STOP" },
+		{ id: 1, name: "MOTOR_ALIGN_RAMP", label: "ALIGN_RAMP", cmd: "START" },
+		{ id: 2, name: "MOTOR_ALIGN_HOLD", label: "ALIGN_HOLD", cmd: null },
+		{ id: 3, name: "MOTOR_DIR_PULSE", label: "DIR_PULSE", cmd: null },
+		{ id: 4, name: "MOTOR_ALIGN_DOWN", label: "ALIGN_DOWN", cmd: null },
+		{ id: 5, name: "MOTOR_TEST", label: "TEST", cmd: "TEST" },
+		{ id: 6, name: "MOTOR_SPRING", label: "SPRING", cmd: "SPRING" },
+		{ id: 7, name: "MOTOR_SPIN", label: "SPIN", cmd: "SPIN" },
+		{ id: 8, name: "MOTOR_FAULT", label: "FAULT", cmd: null },
+		{ id: 9, name: "MOTOR_POS", label: "POS", cmd: null },
+		{ id: 10, name: "MOTOR_STRESS", label: "STRESS", cmd: "STRESS" },
+	] as const
 	const connected = $derived(connectedId !== "")
 	const twoPi = Math.PI * 2
 
@@ -147,8 +160,9 @@
 		try {
 			await Disconnect()
 			connectedId = ""
-			modeName = "—"
+			mode = -1
 			tracking = false
+			bootloaderArmed = false
 			resetWave()
 		} catch (e) {
 			statusMsg = String(e)
@@ -159,13 +173,30 @@
 
 	async function send(cmd: string) {
 		try {
-			if (cmd === "STOP" || cmd === "START" || cmd === "SPRING" || cmd === "SPIN" || cmd === "TEST") {
+			if (cmd === "STOP" || cmd === "START" || cmd === "SPRING" || cmd === "SPIN" || cmd === "TEST" || cmd === "STRESS") {
 				tracking = false
 			}
 			await SendCommand(cmd)
 		} catch (e) {
 			statusMsg = String(e)
 		}
+	}
+
+	async function sendBootloader() {
+		if (!bootloaderArmed) {
+			bootloaderArmed = true
+			return
+		}
+		bootloaderArmed = false
+		tracking = false
+		statusMsg = ""
+		try {
+			await SendCommand("UPLOAD")
+		} catch (e) {
+			statusMsg = String(e)
+		}
+		await doDisconnect()
+		if (!statusMsg) statusMsg = "Entered UF2 bootloader"
 	}
 
 	function flushGoto() {
@@ -292,7 +323,7 @@
 			const s = pending
 			pending = null
 			if (!s) return
-			modeName = s.modeName
+			mode = s.mode
 			angleMrad = s.angleMrad
 			dutyA = s.dutyA
 			dutyB = s.dutyB
@@ -565,15 +596,41 @@
 	</section>
 
 	<footer class="flex flex-col gap-2 border-t border-base-content/10 pt-3">
-		<div class="flex flex-wrap items-center gap-2">
-			<div class="mr-auto">
-				<span class="text-xs opacity-60">Mode</span>
-				<div class="font-mono text-lg">{modeName}</div>
+		<div class="flex items-center gap-2">
+			<span class="font-mono text-xs opacity-40 shrink-0">seq {seq}</span>
+			<div class="flex flex-1 min-w-0 gap-1">
+				{#each modes as m}
+					{@const active = mode === m.id}
+					<button
+						type="button"
+						class="btn btn-sm flex-1 min-w-0 px-0.5 font-mono text-[10px] leading-none"
+						class:btn-primary={active && m.id !== 8 && m.id !== 9}
+						class:btn-error={active && m.id === 8}
+						class:btn-accent={active && m.id === 9}
+						class:pointer-events-none={!m.cmd}
+						title={m.name}
+						disabled={!connected || busy || (!m.cmd && !active)}
+						onclick={() => m.cmd && send(m.cmd)}
+					>
+						{m.label}
+					</button>
+				{/each}
 			</div>
-			<span class="font-mono text-xs opacity-40 mr-2">seq {seq}</span>
-			{#each cmds as cmd}
-				<button class="btn btn-sm" disabled={!connected || busy} onclick={() => send(cmd)}>{cmd}</button>
-			{/each}
+			<div class="shrink-0 border-l border-base-content/20 pl-3 ml-1">
+				<button
+					class="btn btn-sm btn-error"
+					class:btn-outline={!bootloaderArmed}
+					class:ring-2={bootloaderArmed}
+					class:ring-offset-2={bootloaderArmed}
+					class:ring-error={bootloaderArmed}
+					disabled={!connected || busy}
+					onclick={sendBootloader}
+					onblur={() => (bootloaderArmed = false)}
+					title="Click twice to reboot into UF2 bootloader"
+				>
+					BOOTLOADER
+				</button>
+			</div>
 		</div>
 		<div class="flex flex-wrap items-center gap-3">
 			<label class="flex items-center gap-2 text-sm grow min-w-[200px] max-w-md">
