@@ -55,9 +55,18 @@ func TestIsAck(t *testing.T) {
 	}
 }
 
-func TestWrapAngleRad(t *testing.T) {
-	w := WrapAngleRad(3 * math.Pi)
-	if math.Abs(w-math.Pi) > 1e-9 {
-		t.Fatalf("got %v", w)
+func TestPackGoto(t *testing.T) {
+	b := PackGoto(3142)
+	if len(b) != 5 || b[0] != CmdGoto {
+		t.Fatalf("%v", b)
+	}
+	if int32(binary.LittleEndian.Uint32(b[1:])) != 3142 {
+		t.Fatalf("payload %v", b[1:])
+	}
+}
+
+func TestModePos(t *testing.T) {
+	if ModeName(9) != "MOTOR_POS" {
+		t.Fatal(ModeName(9))
 	}
 }

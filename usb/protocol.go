@@ -18,11 +18,14 @@ const (
 
 	TelemSize = 16
 
-	CmdStart  = 0x01
-	CmdStop   = 0x02
-	CmdSpring = 0x03
-	CmdSpin   = 0x04
-	CmdTest   = 0x05
+	CmdStart   = 0x01
+	CmdStop    = 0x02
+	CmdSpring  = 0x03
+	CmdSpin    = 0x04
+	CmdTest    = 0x05
+	CmdGoto    = 0x06
+	CmdSetK    = 0x20
+	CmdSetRest = 0x21
 )
 
 // Telemetry is one decoded Bulk IN frame (magic 0xA5).
@@ -56,6 +59,8 @@ func ModeName(mode uint8) string {
 		return "MOTOR_SPIN"
 	case 8:
 		return "MOTOR_FAULT"
+	case 9:
+		return "MOTOR_POS"
 	default:
 		return fmt.Sprintf("UNKNOWN_%d", mode)
 	}
@@ -110,4 +115,12 @@ func WrapAngleRad(rad float64) float64 {
 		r += twoPi
 	}
 	return r
+}
+
+// PackGoto builds Bulk OUT: opcode 0x06 + little-endian int32 angle_mrad.
+func PackGoto(angleMrad int32) []byte {
+	b := make([]byte, 5)
+	b[0] = CmdGoto
+	binary.LittleEndian.PutUint32(b[1:], uint32(angleMrad))
+	return b
 }
