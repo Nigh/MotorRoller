@@ -24,8 +24,10 @@ const (
 	CmdSpin    = 0x04
 	CmdTest    = 0x05
 	CmdGoto    = 0x06
+	CmdStress  = 0x07
 	CmdSetK    = 0x20
 	CmdSetRest = 0x21
+	CmdUpload  = 0x7F // reboot into UF2 bootloader; no ACK
 )
 
 // Telemetry is one decoded Bulk IN frame (magic 0xA5).
@@ -61,6 +63,8 @@ func ModeName(mode uint8) string {
 		return "MOTOR_FAULT"
 	case 9:
 		return "MOTOR_POS"
+	case 10:
+		return "MOTOR_STRESS"
 	default:
 		return fmt.Sprintf("UNKNOWN_%d", mode)
 	}
