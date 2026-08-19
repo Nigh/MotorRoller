@@ -10,6 +10,8 @@ Built with [Wails v3](https://wails.io/) + Svelte + DaisyUI + Tailwind. Speaks t
 - Real-time phase A/B/C duty values and scrolling waveforms
 - Encoder angle (mrad / rad / deg) with a marked dial
 - Live motor mode label and START / STOP / SPRING / SPIN / TEST commands
+- Dial tracking (`GOTO` / `MOTOR_POS`): drag or scroll wheel to stream setpoints
+- Spring controls: `SET_K` (stiffness) and `SET_REST`
 
 ## Requirements
 
