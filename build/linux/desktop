@@ -1,13 +1,11 @@
 [Desktop Entry]
 Version=1.0
-Name=Wails Demo
-Comment=My Product Description
+Name=MotorRoller
+Comment=TinyKnob USB motor host
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/wails-demo %u
+Exec=/usr/local/bin/MotorRoller %u
 Terminal=false
 Type=Application
-Icon=wails-demo
+Icon=MotorRoller
 Categories=Utility;
-StartupWMClass=wails-demo
-
- 
+StartupWMClass=MotorRoller

@@ -11,7 +11,7 @@ includes:
     taskfile: build/Taskfile.yml
 
 vars:
-  APP_NAME: wails-demo
+  APP_NAME: MotorRoller
   BIN_DIR: build/bin
   PACKAGE_MANAGER: npm
   VITE_PORT: 9245
@@ -23,9 +23,9 @@ tasks:
       WAILS_BUILD_TAGS:
         sh: 'echo $WAILS_BUILD_TAGS'
     cmds:
-      - cmd: go build -buildvcs=false -gcflags=all="-l" ${WAILS_BUILD_TAGS:+-tags $WAILS_BUILD_TAGS} -o build/bin/wails-demo
+      - cmd: go build -buildvcs=false -gcflags=all="-l" ${WAILS_BUILD_TAGS:+-tags $WAILS_BUILD_TAGS} -o build/bin/MotorRoller
         platforms: [linux, darwin]
-      - cmd: go build -buildvcs=false -gcflags=all="-l" {{if .WAILS_BUILD_TAGS}}-tags {{.WAILS_BUILD_TAGS}}{{end}} -o build/bin/wails-demo.exe
+      - cmd: go build -buildvcs=false -gcflags=all="-l" {{if .WAILS_BUILD_TAGS}}-tags {{.WAILS_BUILD_TAGS}}{{end}} -o build/bin/MotorRoller.exe
         platforms: [windows]
 
   run:

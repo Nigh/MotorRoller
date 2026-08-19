@@ -1,6 +1,6 @@
 {
-  "name": "wails-demo",
-  "outputfilename": "wails-demo",
+  "name": "MotorRoller",
+  "outputfilename": "MotorRoller",
   "frontend": {
     "dir": "./frontend",
     "install": "npm install",
