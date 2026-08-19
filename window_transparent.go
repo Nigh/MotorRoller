@@ -8,9 +8,9 @@ var isFrameless = true
 
 func configureWindow(app *application.App) {
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:            "wails-template",
-		Width:            600,
-		Height:           900,
+		Title:            "MotorRoller",
+		Width:            1000,
+		Height:           700,
 		Frameless:        true,
 		BackgroundColour: application.NewRGB(0, 0, 0),
 		BackgroundType:   application.BackgroundTypeTransparent,

@@ -1,114 +1,109 @@
-# WSTDT Template
+# MotorRoller
 
-Wails Svelte TS DaisyUI Tailwindcss Template
+Host application for [TinyKnob](https://github.com/Nigh/TinyKnob) — live USB telemetry and motor mode control.
 
-## About
+Built with [Wails v3](https://wails.io/) + Svelte + DaisyUI + Tailwind. Speaks the TinyKnob **Vendor Bulk** protocol ([docs/usb-protocol.md](https://github.com/Nigh/TinyKnob/blob/main/docs/usb-protocol.md)): VID `0xACDC`, PID `0x4011`.
 
-This is a Wails Svelte-TS-DaisyUI-Tailwindcss template.
+## Features
 
-![](./screenshot.png)
+- Auto-enumerate TinyKnob devices; pick and connect when several are present
+- Real-time phase A/B/C duty values and scrolling waveforms
+- Encoder angle (mrad / rad / deg) with a marked dial
+- Live motor mode label and START / STOP / SPRING / SPIN / TEST commands
 
-## Live Development
+## Requirements
 
-To run in live development mode, run `wails3 dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
-
-## Building
-
-To build a redistributable, production mode package, use `wails3 build`.
-
-### Using wails3 CLI
-
-**Dev mode** — uses `WAILS_BUILD_TAGS` environment variable:
+- Go 1.25+
+- Node.js + npm
+- [Wails v3 CLI](https://v3.wails.io/) (`wails3`)
+- libusb-1.0 (and headers for build)
+- Linux: Wails defaults to **GTK4** + `webkitgtk-6.0`
 
 ```bash
-# Linux / macOS
-WAILS_BUILD_TAGS=transparent wails3 dev
-WAILS_BUILD_TAGS="transparent,gtk3" wails3 dev  # Linux GTK3 only
+# Debian/Ubuntu (GTK4 — default)
+sudo apt install libusb-1.0-0-dev libgtk-4-dev libwebkitgtk-6.0-dev
 
-# PowerShell
-$env:WAILS_BUILD_TAGS="transparent"; wails3 dev
-
-# CMD
-set WAILS_BUILD_TAGS=transparent && wails3 dev
+# Optional GTK3 backend (only if you build with -tags gtk3)
+# sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev
 ```
 
-**Build mode** — uses `-tags` flag (all platforms):
+### udev (Linux, non-root USB access)
+
+Without this, Connect fails with `libusb: bad access [code -3]`:
+
+```bash
+sudo tee /etc/udev/rules.d/99-tinyknob.rules <<'EOF'
+SUBSYSTEM=="usb", ATTR{idVendor}=="acdc", ATTR{idProduct}=="4011", MODE="0666", TAG+="uaccess"
+EOF
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Unplug/replug the device after installing the rule.
+
+## Develop
+
+```bash
+# GTK4 (default)
+wails3 dev
+
+# Or
+./build.sh dev
+```
+
+If the frontend builds but the window dies with WebKit/`bwrap` errors on Ubuntu 24.04+, disable the WebKit sandbox for local dev (see Troubleshooting).
+
+Bindings are generated under `frontend/bindings/` (gitignored).
+
+## Build
 
 ```bash
 wails3 build
-wails3 build -tags transparent
-wails3 build -tags "transparent,gtk3"  # Linux GTK3 only
+# or
+./build.sh build
 ```
 
-### Using build.sh (Linux/macOS)
+Binary: `build/bin/MotorRoller`.
 
-On Linux or macOS, you can also use the included `build.sh` script:
+Optional: `-tags gtk3` / `./build.sh build --gtk3` for the GTK3 WebKit backend; `-tags transparent` for frameless transparent (compositor-dependent, not required for this UI).
+
+## Protocol
+
+Vendor Bulk only (OUT `0x01`, IN `0x81`). CDC is unused by this host. Layout: [TinyKnob USB protocol](https://github.com/Nigh/TinyKnob/blob/main/docs/usb-protocol.md).
+
+## Troubleshooting (Linux)
+
+### `Failed to open display`
+
+Wails needs a real GUI session. Run from a terminal inside your desktop (so `DISPLAY` or `WAYLAND_DISPLAY` is set). Headless / bare SSH shells will fail.
+
+### `bwrap: setting up uid map: Permission denied` / `Failed to fully launch dbus-proxy` / `SIGTRAP`
+
+WebKitGTK sandbox uses `bwrap`. Ubuntu often has `kernel.apparmor_restrict_unprivileged_userns=1`, which breaks it.
+
+Dev workaround:
 
 ```bash
-./build.sh dev                       # Dev mode (standard window)
-./build.sh dev --transparent         # Dev mode (transparent frameless)
-./build.sh dev --transparent --gtk3  # Dev mode (transparent, GTK3 backend)
-./build.sh build                     # Production build (standard window)
-./build.sh build --transparent       # Production build (transparent frameless)
-./build.sh build --transparent --gtk3 # Production build (transparent, GTK3 backend)
+export WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1
+wails3 dev
 ```
 
-## Transparent Mode
+(Optional, wider impact: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`.)
 
-Transparent mode creates a frameless window with a transparent background, useful for overlay-style UIs.
+### `libusb: bad access [code -3]`
 
-### Platform Support
+Install the udev rule above, reload, replug. Confirm with `lsusb -d acdc:4011` and that your user can open the device without root.
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| macOS | Supported | Works out of the box |
-| Windows | Supported | Requires Windows 11 for translucent backdrop |
-| Linux (GTK3) | Supported | Requires a compositor; build with `-tags "transparent,gtk3"` |
-| Linux (GTK4) | **Not supported** | Wails v3 alpha limitation — `setTransparent()` is a no-op stub |
+### Device lists but Connect fails / no Vendor interface
 
-### Linux Notes
-
-Ubuntu 24.04+ defaults to the GTK4 backend, which does **not** support transparency in wails v3 alpha. To use transparent mode on Linux, build with the GTK3 backend:
+Confirm firmware exposes Vendor IF (class `0xFF`) with Bulk `0x01`/`0x81`:
 
 ```bash
-WAILS_BUILD_TAGS="transparent,gtk3" wails3 dev
+lsusb -d acdc:4011 -v | grep -A20 'bInterfaceClass.*255'
 ```
 
-This requires `libgtk-3-dev` and `libwebkit2gtk-4.1-dev` to be installed.
+Host code must claim with gousb `Interface(ifaceNumber, alternateSetting)` — use `alt.Alternate`, **not** `alt.Number` (`Number` is the interface id again). Wrong alt yields a failed claim that used to look like “vendor bulk interface not found”.
 
-#### GNOME (Mutter) Does Not Support Transparent Windows
+## License
 
-GNOME's compositor **Mutter deliberately strips the alpha channel** from client application windows. This means transparent mode will **not work** on any GNOME session (Wayland or X11), regardless of GTK version or build tags.
-
-This is not a bug or misconfiguration — it is an intentional design decision by the GNOME project. The display protocols (Wayland/X11) and GTK itself both fully support transparency; the blocking layer is Mutter.
-
-Affected desktop environments: **GNOME, Ubuntu Desktop (default), GNOME Flashback, Budgie (uses Mutter).**
-
-#### Recommended: Use Hyprland
-
-[Hyprland](https://hyprland.org/) is a Wayland compositor based on wlroots with first-class transparent window support. It is lightweight, actively maintained, and works out of the box with this template.
-
-```bash
-# Install Hyprland on Ubuntu 24.04
-sudo add-apt-repository ppa:hyprland/hyprland
-sudo apt update
-sudo apt install hyprland
-```
-
-Log out, select **Hyprland** from the login screen (gear icon), then run:
-
-```bash
-WAILS_BUILD_TAGS="transparent,gtk3" wails3 dev
-```
-
-#### Other Compatible Compositors
-
-| Compositor | Protocol | Install |
-|-----------|----------|---------|
-| **Hyprland** (recommended) | Wayland | `sudo apt install hyprland` |
-| **KWin / KDE Plasma** | Wayland + X11 | `sudo apt install plasma-desktop` |
-| **Sway** | Wayland | `sudo apt install sway` |
-| **Picom** (with X11 WM) | X11 | `sudo apt install picom` |
+MIT

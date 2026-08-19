@@ -2,11 +2,11 @@ version: '3'
 
 info:
   companyName: "xianii"
-  productName: "Wails Demo"
-  productIdentifier: "com.xianii.wails-demo"
-  description: "Wails Svelte DaisyUI Tailwindcss Template"
+  productName: "MotorRoller"
+  productIdentifier: "com.xianii.MotorRoller"
+  description: "Host app for TinyKnob USB motor telemetry and control"
   copyright: "(c) 2026, xianii"
-  comments: "Wails Svelte DaisyUI Template"
+  comments: "TinyKnob host — Wails + Svelte"
   version: "0.1.0"
 
 dev_mode:

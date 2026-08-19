@@ -1,6 +1,6 @@
 # Build output
 build/bin
-wails-demo
+MotorRoller
 *.syso
 
 # Frontend

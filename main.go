@@ -10,15 +10,17 @@ import (
 var assets embed.FS
 
 func main() {
+	svc := &AppService{}
 	app := application.New(application.Options{
-		Name: "wails-demo",
+		Name: "MotorRoller",
 		Services: []application.Service{
-			application.NewService(&AppService{}),
+			application.NewService(svc),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
 	})
+	svc.setApp(app)
 
 	configureWindow(app)
 
