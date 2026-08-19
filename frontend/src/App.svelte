@@ -320,13 +320,17 @@
 		ctx.setTransform(1, 0, 0, 1, 0, 0)
 		ctx.clearRect(0, 0, dw, dh)
 
+		const token = (name: string) =>
+			getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 		const mid = Math.round(dh / 2) + 0.5
-		ctx.strokeStyle = "rgba(255,255,255,0.12)"
+		ctx.strokeStyle = token("--color-base-content")
+		ctx.globalAlpha = 0.12
 		ctx.lineWidth = 1
 		ctx.beginPath()
 		ctx.moveTo(0, mid)
 		ctx.lineTo(dw, mid)
 		ctx.stroke()
+		ctx.globalAlpha = 1
 
 		if (samples.length < 2) return
 
@@ -335,9 +339,9 @@
 		const yScale = dh - pad * 2
 		const lw = Math.max(1, Math.round(dpr))
 		const series: ["a" | "b" | "c", string][] = [
-			["a", "#f87171"],
-			["b", "#4ade80"],
-			["c", "#60a5fa"],
+			["a", token("--color-error")],
+			["b", token("--color-success")],
+			["c", token("--color-info")],
 		]
 		const nx = dw
 		const dt = WINDOW_MS / nx
@@ -429,7 +433,7 @@
 	})
 </script>
 
-<main class="h-screen w-screen p-4 flex flex-col gap-3 text-left">
+<main class="h-screen w-screen p-4 flex flex-col gap-3 text-left bg-base-100 text-base-content font-sans">
 	<header class="flex flex-wrap items-end gap-2">
 		<div class="flex-1 min-w-[220px]">
 			<label class="label py-0" for="dev">
@@ -466,36 +470,43 @@
 		<div class="alert alert-warning text-sm py-2">{statusMsg}</div>
 	{/if}
 
-	<section class="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-3 flex-1 min-h-0">
-		<div class="flex flex-col gap-2 min-h-0">
-			<div class="grid grid-cols-3 gap-2 w-full">
-				<div class="relative h-8 rounded-box bg-base-300 overflow-hidden">
-					<div class="absolute inset-y-0 left-0 bg-red-400" style="width: {barWidth(dutyA)}"></div>
-					<div class="absolute inset-0 flex items-center justify-center font-mono text-sm text-black/80">A {pct(dutyA)}</div>
-				</div>
-				<div class="relative h-8 rounded-box bg-base-300 overflow-hidden">
-					<div class="absolute inset-y-0 left-0 bg-green-400" style="width: {barWidth(dutyB)}"></div>
-					<div class="absolute inset-0 flex items-center justify-center font-mono text-sm text-black/80">B {pct(dutyB)}</div>
-				</div>
-				<div class="relative h-8 rounded-box bg-base-300 overflow-hidden">
-					<div class="absolute inset-y-0 left-0 bg-blue-400" style="width: {barWidth(dutyC)}"></div>
-					<div class="absolute inset-0 flex items-center justify-center font-mono text-sm text-black/80">C {pct(dutyC)}</div>
-				</div>
+	<section class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_240px] grid-rows-[minmax(0,1fr)_auto] lg:grid-rows-1 gap-3 flex-1 min-h-0 overflow-hidden">
+		<div class="flex flex-col gap-2 min-h-0 overflow-hidden">
+			<div class="grid grid-cols-3 gap-2 w-full shrink-0">
+				{#each [
+					{ k: "A", v: dutyA, fill: "bg-error", ink: "text-error-content" },
+					{ k: "B", v: dutyB, fill: "bg-success", ink: "text-success-content" },
+					{ k: "C", v: dutyC, fill: "bg-info", ink: "text-info-content" },
+				] as p}
+					<div class="@container relative h-8 overflow-hidden rounded-box bg-base-300 select-none">
+						<span class="pointer-events-none absolute inset-0 z-0 flex items-center justify-center font-mono text-sm text-base-content select-none">
+							{p.k} {pct(p.v)}
+						</span>
+						<div class="absolute inset-y-0 left-0 z-10 overflow-hidden {p.fill}" style="width: {barWidth(p.v)}">
+							<span class="pointer-events-none flex h-full w-[100cqw] items-center justify-center font-mono text-sm select-none {p.ink}">
+								{p.k} {pct(p.v)}
+							</span>
+						</div>
+					</div>
+				{/each}
 			</div>
-			<div class="flex-1 min-h-[180px] rounded-box bg-base-200/60 border border-base-content/10 p-2">
+			<div class="flex-1 min-h-0 overflow-hidden rounded-box bg-base-200/60 border border-base-content/10 p-2">
 				<canvas bind:this={waveCanvas} class="w-full h-full block"></canvas>
 			</div>
 		</div>
 
-		<div class="flex flex-col items-center gap-2">
-			<!-- Hit target is the wrapper: SVG fill/hit-testing is unreliable in WebKit. -->
+		<div class="flex flex-col items-center gap-2 shrink-0 mt-4 lg:min-h-0 lg:overflow-auto">
+			<!-- Outer pad so tracking ring is not clipped by overflow / the wave cell. -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="relative w-52 h-52 shrink-0 select-none overflow-hidden rounded-full"
+				class="p-1.5 rounded-full shrink-0"
+				class:ring-2={tracking}
+				class:ring-accent={tracking}
+			>
+			<div
+				class="relative w-52 h-52 select-none overflow-hidden rounded-full"
 				class:cursor-pointer={connected}
 				class:cursor-grabbing={dragging}
-				class:ring-2={tracking}
-				class:ring-cyan-400={tracking}
 				onpointerdown={onDialPointerDown}
 				onpointermove={onDialPointerMove}
 				onpointerup={onDialPointerUp}
@@ -518,32 +529,33 @@
 						/>
 					{/each}
 					<!-- UI: 0 at 12 o'clock, CW+ (SVG rotate is CW) -->
-					<g transform="rotate({needleDeg} 100 100)">
-						<line x1="100" y1="100" x2="100" y2="28" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" />
-						<circle cx="100" cy="28" r="5" fill="#fbbf24" />
+					<g class="text-warning" transform="rotate({needleDeg} 100 100)">
+						<line x1="100" y1="100" x2="100" y2="28" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+						<circle cx="100" cy="28" r="5" fill="currentColor" />
 					</g>
 					{#if tracking}
-						<g transform="rotate({targetNeedleDeg} 100 100)">
+						<g class="text-accent" transform="rotate({targetNeedleDeg} 100 100)">
 							<line
 								x1="100"
 								y1="100"
 								x2="100"
 								y2="30"
-								stroke="#22d3ee"
+								stroke="currentColor"
 								stroke-width="2.5"
 								stroke-linecap="round"
 								stroke-dasharray="4 3"
 							/>
-							<circle cx="100" cy="30" r="6" fill="#22d3ee" stroke="#0e7490" stroke-width="1" />
+							<circle cx="100" cy="30" r="6" fill="currentColor" stroke="currentColor" stroke-opacity="0.45" stroke-width="1" />
 						</g>
 					{/if}
 				</svg>
+			</div>
 			</div>
 			<div class="font-mono text-sm text-center leading-relaxed">
 				<div>{angleDeg.toFixed(1)}°</div>
 				<div class="opacity-70">{angleRad.toFixed(3)} rad</div>
 				{#if tracking}
-					<div class="text-cyan-300 text-xs mt-1">TRACK → {targetUiRad.toFixed(3)} rad</div>
+					<div class="text-accent text-xs mt-1">TRACK → {targetUiRad.toFixed(3)} rad</div>
 					<div class="text-xs opacity-50">drag / wheel · STOP to exit</div>
 				{:else}
 					<div class="text-xs opacity-50 mt-1">click / drag dial to track</div>
