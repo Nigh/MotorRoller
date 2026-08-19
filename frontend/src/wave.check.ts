@@ -5,11 +5,12 @@ import {
 	advancePlayhead,
 	newPlayhead,
 	noteBurstRate,
-	pruneSamples,
-	resetPlayhead,
-	sampleAt,
-	type WaveSample,
-} from "./wave.ts"
+		pruneSamples,
+		rangeIn,
+		resetPlayhead,
+		sampleAt,
+		type WaveSample,
+	} from "./wave.ts"
 
 function assert(cond: boolean, msg: string) {
 	if (!cond) throw new Error(msg)
@@ -26,6 +27,16 @@ assert(sampleAt(samples, -10, "a") === 0, "hold before start")
 assert(sampleAt(samples, 300, "c") === 1, "hold at end")
 assert(Math.abs(sampleAt(samples, 50, "a") - 0.5) < 0.15, "mid-rise interpolates")
 assert(sampleAt([{ t: 1, a: 0.25, b: 0, c: 0 }], 99, "a") === 0.25, "single sample")
+
+const spiked: WaveSample[] = [
+	{ t: 0, a: 0, b: 0, c: 0 },
+	{ t: 50, a: 1, b: 0, c: 0 },
+	{ t: 100, a: 0, b: 0, c: 0 },
+]
+const env = rangeIn(spiked, 0, 100, "a")
+assert(env.max === 1 && env.min === 0, "bin envelope keeps spike")
+const envShift = rangeIn(spiked, 10, 90, "a")
+assert(envShift.max === 1, "spike still visible when not at bin edge")
 
 const clock = new SeqClock()
 assert(clock.unwrap(10) === 0, "first unwrap anchors at 0")

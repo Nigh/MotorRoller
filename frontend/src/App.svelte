@@ -17,8 +17,8 @@
 		newPlayhead,
 		noteBurstRate,
 		pruneSamples,
+		rangeIn,
 		resetPlayhead,
-		sampleAt,
 		type WaveSample,
 	} from "./wave"
 
@@ -333,13 +333,14 @@
 		const tLeft = ph - WINDOW_MS
 		const pad = 2 * dpr
 		const yScale = dh - pad * 2
-		const lw = Math.max(2, Math.round(dpr * 2))
+		const lw = Math.max(1, Math.round(dpr))
 		const series: ["a" | "b" | "c", string][] = [
 			["a", "#f87171"],
 			["b", "#4ade80"],
 			["c", "#60a5fa"],
 		]
 		const nx = dw
+		const dt = WINDOW_MS / nx
 		for (const [key, color] of series) {
 			ctx.strokeStyle = color
 			ctx.lineWidth = lw
@@ -347,11 +348,14 @@
 			ctx.lineCap = "round"
 			ctx.beginPath()
 			for (let i = 0; i < nx; i++) {
-				const t = tLeft + (i / (nx - 1)) * WINDOW_MS
-				const v = Math.min(1, Math.max(0, sampleAt(samples, t, key)))
-				const y = pad + (1 - v) * yScale
-				if (i === 0) ctx.moveTo(i, y)
-				else ctx.lineTo(i, y)
+				const t0 = tLeft + i * dt
+				const t1 = t0 + dt
+				const { min, max } = rangeIn(samples, t0, t1, key)
+				const yHi = pad + (1 - max) * yScale
+				const yLo = pad + (1 - min) * yScale
+				const x = i + 0.5
+				ctx.moveTo(x, yHi)
+				ctx.lineTo(x, yLo === yHi ? yHi + 0.5 : yLo)
 			}
 			ctx.stroke()
 		}
