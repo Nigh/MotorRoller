@@ -19,6 +19,7 @@
 		pruneSamples,
 		rangeIn,
 		resetPlayhead,
+		RpmMeter,
 		type WaveSample,
 	} from "./wave"
 
@@ -72,6 +73,8 @@
 	const samples: WaveSample[] = []
 	const seqClock = new SeqClock()
 	const playhead = newPlayhead()
+	const rpmMeter = new RpmMeter()
+	let rpmFw = $state(0)
 	let lastBurstWall = 0
 	let lastBurstSeq = 0
 	let lastGotoAt = 0
@@ -113,11 +116,15 @@
 
 	const targetUiRad = $derived(fwToUi(targetMrad) / 1000)
 	const targetNeedleDeg = $derived((wrap01(targetUiRad) * 180) / Math.PI)
+	/** UI CW+ (same sense as the dial needle). */
+	const rpmUi = $derived(-rpmFw)
 
 	function resetWave(): void {
 		samples.length = 0
 		seqClock.reset()
 		resetPlayhead(playhead)
+		rpmMeter.reset()
+		rpmFw = 0
 		lastBurstWall = 0
 		lastBurstSeq = 0
 	}
@@ -431,6 +438,7 @@
 		}
 		lastBurstWall = wall
 		lastBurstSeq = lastT
+		rpmFw = rpmMeter.push(lastT, s.angleMrad)
 	}
 
 	function pct(v: number): string {
@@ -583,6 +591,7 @@
 			</div>
 			</div>
 			<div class="font-mono text-sm text-center leading-relaxed">
+				<div class="text-lg tabular-nums">{rpmUi.toFixed(1)} <span class="text-xs opacity-60">RPM</span></div>
 				<div>{angleDeg.toFixed(1)}°</div>
 				<div class="opacity-70">{angleRad.toFixed(3)} rad</div>
 				{#if tracking}

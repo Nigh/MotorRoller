@@ -185,3 +185,29 @@ export function rangeIn(
 		max: Math.min(1, Math.max(0, hi)),
 	}
 }
+
+/** Seq ticks ≈ ms. Δmrad/Δt = rad/s → RPM. */
+export function rpmFromDelta(dMrad: number, dtSeq: number): number {
+	if (dtSeq <= 0) return 0
+	return (dMrad / dtSeq) * (60 / (2 * Math.PI))
+}
+
+/** Rolling Δθ/Δt over ~200 seq ticks (device ms at 1 kHz). */
+export class RpmMeter {
+	private buf: { t: number; a: number }[] = []
+	private readonly window = 200
+
+	reset(): void {
+		this.buf.length = 0
+	}
+
+	push(t: number, angleMrad: number): number {
+		this.buf.push({ t, a: angleMrad })
+		const cut = t - this.window
+		while (this.buf.length > 2 && this.buf[0].t < cut) this.buf.shift()
+		if (this.buf.length < 2) return 0
+		const a0 = this.buf[0]
+		const a1 = this.buf[this.buf.length - 1]
+		return rpmFromDelta(a1.a - a0.a, a1.t - a0.t)
+	}
+}
