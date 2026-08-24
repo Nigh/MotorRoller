@@ -9,17 +9,21 @@
 		Goto,
 		SetK,
 		SetRest,
+		SetCogScale,
 	} from "../bindings/MotorRoller/appservice.js"
 	import {
 		WINDOW_MS,
 		SeqClock,
 		advancePlayhead,
+		currentAmpScale,
 		newPlayhead,
 		noteBurstRate,
 		pruneSamples,
 		rangeIn,
 		resetPlayhead,
 		RpmMeter,
+		type CurKey,
+		type DutyKey,
 		type WaveSample,
 	} from "./wave"
 
@@ -36,6 +40,10 @@
 		dutyA: number
 		dutyB: number
 		dutyC: number
+		idA: number
+		iqA: number
+		iqRefA: number
+		uq: number
 	}
 
 	type Snapshot = {
@@ -46,6 +54,11 @@
 		dutyB: number
 		dutyC: number
 		seq: number
+		idA: number
+		iqA: number
+		iqRefA: number
+		vbusV: number
+		uq: number
 		points?: TelemPoint[]
 	}
 
@@ -61,11 +74,18 @@
 	let dutyB: number = $state(0)
 	let dutyC: number = $state(0)
 	let seq: number = $state(0)
+	let idA: number = $state(0)
+	let iqA: number = $state(0)
+	let iqRefA: number = $state(0)
+	let vbusV: number = $state(0)
+	let uq: number = $state(0)
 
 	let tracking = $state(false)
 	let targetMrad = $state(0)
 	let dragging = $state(false)
 	let kx10 = $state(25) // K = 2.5 default
+	let cogScaleX1000 = $state(1000)
+	let cogScaleTimer: ReturnType<typeof setTimeout> | null = null
 
 	let pending: Snapshot | null = null
 	let uiRaf = 0
@@ -88,10 +108,7 @@
 
 	const modes = [
 		{ id: 0, name: "MOTOR_IDLE", label: "IDLE", cmd: "STOP" },
-		{ id: 1, name: "MOTOR_ALIGN_RAMP", label: "ALIGN_RAMP", cmd: "START" },
-		{ id: 2, name: "MOTOR_ALIGN_HOLD", label: "ALIGN_HOLD", cmd: null },
-		{ id: 3, name: "MOTOR_DIR_PULSE", label: "DIR_PULSE", cmd: null },
-		{ id: 4, name: "MOTOR_ALIGN_DOWN", label: "ALIGN_DOWN", cmd: null },
+		{ id: 1, name: "MOTOR_ALIGN", label: "ALIGN", cmd: "START", stateIds: [1, 2, 3, 4] },
 		{ id: 5, name: "MOTOR_TEST", label: "TEST", cmd: "TEST" },
 		{ id: 6, name: "MOTOR_SPRING", label: "SPRING", cmd: "SPRING" },
 		{ id: 7, name: "MOTOR_SPIN", label: "SPIN", cmd: "SPIN" },
@@ -99,6 +116,7 @@
 		{ id: 9, name: "MOTOR_POS", label: "POS", cmd: null },
 		{ id: 10, name: "MOTOR_STRESS", label: "STRESS", cmd: "STRESS" },
 	] as const
+	const alignLabels = ["ALIGN", "ALIGN_RAMP", "ALIGN_HOLD", "DIR_PULSE", "ALIGN_DOWN"] as const
 	const connected = $derived(connectedId !== "")
 	const twoPi = Math.PI * 2
 
@@ -323,6 +341,17 @@
 		}
 	}
 
+	function queueCogScale() {
+		if (!connected) return
+		if (cogScaleTimer != null) return
+		cogScaleTimer = setTimeout(() => {
+			cogScaleTimer = null
+			SetCogScale(cogScaleX1000).catch((e: unknown) => {
+				statusMsg = String(e)
+			})
+		}, 40)
+	}
+
 	function scheduleFlush() {
 		if (uiRaf) return
 		uiRaf = requestAnimationFrame(() => {
@@ -336,6 +365,11 @@
 			dutyB = s.dutyB
 			dutyC = s.dutyC
 			seq = s.seq
+			idA = s.idA
+			iqA = s.iqA
+			iqRefA = s.iqRefA
+			vbusV = s.vbusV
+			uq = s.uq
 		})
 	}
 
@@ -360,47 +394,94 @@
 
 		const token = (name: string) =>
 			getComputedStyle(document.documentElement).getPropertyValue(name).trim()
-		const mid = Math.round(dh / 2) + 0.5
-		ctx.strokeStyle = token("--color-base-content")
-		ctx.globalAlpha = 0.12
-		ctx.lineWidth = 1
+		const ink = token("--color-base-content")
+		const gap = Math.max(2, Math.round(2 * dpr))
+		const topH = Math.floor((dh - gap) / 2)
+		const botY0 = topH + gap
+		const botH = dh - botY0
+		const lw = Math.max(1, Math.round(dpr))
+		const pad = 2 * dpr
+
+		const drawMid = (y: number) => {
+			ctx.strokeStyle = ink
+			ctx.globalAlpha = 0.12
+			ctx.lineWidth = 1
+			ctx.beginPath()
+			ctx.moveTo(0, y)
+			ctx.lineTo(dw, y)
+			ctx.stroke()
+			ctx.globalAlpha = 1
+		}
+		drawMid(Math.round(topH / 2) + 0.5)
+		drawMid(botY0 + Math.round(botH / 2) + 0.5)
+
+		// pane separator
+		ctx.strokeStyle = ink
+		ctx.globalAlpha = 0.2
 		ctx.beginPath()
-		ctx.moveTo(0, mid)
-		ctx.lineTo(dw, mid)
+		ctx.moveTo(0, topH + gap / 2)
+		ctx.lineTo(dw, topH + gap / 2)
 		ctx.stroke()
 		ctx.globalAlpha = 1
 
 		if (samples.length < 2) return
 
 		const tLeft = ph - WINDOW_MS
-		const pad = 2 * dpr
-		const yScale = dh - pad * 2
-		const lw = Math.max(1, Math.round(dpr))
-		const series: ["a" | "b" | "c", string][] = [
-			["a", token("--color-error")],
-			["b", token("--color-success")],
-			["c", token("--color-info")],
-		]
+		const tRight = ph
 		const nx = dw
 		const dt = WINDOW_MS / nx
-		for (const [key, color] of series) {
-			ctx.strokeStyle = color
-			ctx.lineWidth = lw
-			ctx.lineJoin = "round"
-			ctx.lineCap = "round"
-			ctx.beginPath()
-			for (let i = 0; i < nx; i++) {
-				const t0 = tLeft + i * dt
-				const t1 = t0 + dt
-				const { min, max } = rangeIn(samples, t0, t1, key)
-				const yHi = pad + (1 - max) * yScale
-				const yLo = pad + (1 - min) * yScale
-				const x = i + 0.5
-				ctx.moveTo(x, yHi)
-				ctx.lineTo(x, yLo === yHi ? yHi + 0.5 : yLo)
+
+		const strokePane = (
+			y0: number,
+			h: number,
+			series: [DutyKey | CurKey, string, (v: number) => number][],
+		) => {
+			const yScale = h - pad * 2
+			for (const [key, color, mapY] of series) {
+				ctx.strokeStyle = color
+				ctx.lineWidth = lw
+				ctx.lineJoin = "round"
+				ctx.lineCap = "round"
+				ctx.beginPath()
+				for (let i = 0; i < nx; i++) {
+					const t0 = tLeft + i * dt
+					const t1 = t0 + dt
+					const { min, max } = rangeIn(samples, t0, t1, key)
+					const yHi = y0 + pad + mapY(max) * yScale
+					const yLo = y0 + pad + mapY(min) * yScale
+					const x = i + 0.5
+					ctx.moveTo(x, yHi)
+					ctx.lineTo(x, yLo === yHi ? yHi + 0.5 : yLo)
+				}
+				ctx.stroke()
 			}
-			ctx.stroke()
 		}
+
+		// Top: duty 0→1 (top→bottom inverted like before)
+		strokePane(0, topH, [
+			["a", token("--color-error"), (v) => 1 - v],
+			["b", token("--color-success"), (v) => 1 - v],
+			["c", token("--color-info"), (v) => 1 - v],
+		])
+
+		// Bottom: bipolar current loop; Id/Iq/Iq* auto-scale (A), Uq fixed ±1 → full height
+		const amp = currentAmpScale(samples, tLeft, tRight)
+		const mapAmp = (v: number) => 0.5 - v / (2 * amp)
+		const mapUq = (v: number) => 0.5 - v / 2
+		strokePane(botY0, botH, [
+			["id", token("--color-warning"), mapAmp],
+			["iq", token("--color-error"), mapAmp],
+			["iqRef", token("--color-success"), mapAmp],
+			["uq", token("--color-secondary"), mapUq],
+		])
+
+		ctx.fillStyle = ink
+		ctx.globalAlpha = 0.45
+		ctx.font = `${Math.max(10, Math.round(10 * dpr))}px ui-monospace, monospace`
+		ctx.textBaseline = "top"
+		ctx.fillText("PWM", 4 * dpr, 2 * dpr)
+		ctx.fillText(`CUR ±${amp.toFixed(2)}A`, 4 * dpr, botY0 + 2 * dpr)
+		ctx.globalAlpha = 1
 	}
 
 	function waveTick() {
@@ -421,7 +502,18 @@
 		const pts =
 			s.points && s.points.length > 0
 				? s.points
-				: [{ seq: s.seq, dutyA: s.dutyA, dutyB: s.dutyB, dutyC: s.dutyC }]
+				: [
+						{
+							seq: s.seq,
+							dutyA: s.dutyA,
+							dutyB: s.dutyB,
+							dutyC: s.dutyC,
+							idA: s.idA,
+							iqA: s.iqA,
+							iqRefA: s.iqRefA,
+							uq: s.uq,
+						},
+					]
 		let firstT = 0
 		let lastT = 0
 		for (let i = 0; i < pts.length; i++) {
@@ -429,7 +521,16 @@
 			const t = seqClock.unwrap(p.seq)
 			if (i === 0) firstT = t
 			lastT = t
-			samples.push({ t, a: p.dutyA, b: p.dutyB, c: p.dutyC })
+			samples.push({
+				t,
+				a: p.dutyA,
+				b: p.dutyB,
+				c: p.dutyC,
+				id: p.idA ?? 0,
+				iq: p.iqA ?? 0,
+				iqRef: p.iqRefA ?? 0,
+				uq: p.uq ?? 0,
+			})
 		}
 		if (lastBurstWall > 0 && lastT > lastBurstSeq) {
 			noteBurstRate(playhead, lastT - lastBurstSeq, wall - lastBurstWall)
@@ -458,6 +559,15 @@
 			pending = s
 			scheduleFlush()
 		})
+		const offCogScale = Events.On("cog-scale", (ev: { data?: { mode: number; scaleX1000: number } }) => {
+			const data = Array.isArray(ev.data) ? ev.data[0] : ev.data
+			if (!data) return
+			if (cogScaleTimer != null) {
+				clearTimeout(cogScaleTimer)
+				cogScaleTimer = null
+			}
+			cogScaleX1000 = Math.min(2000, Math.max(0, data.scaleX1000))
+		})
 		refreshDevices()
 		ConnectedID().then((id: string) => {
 			connectedId = id || ""
@@ -465,9 +575,11 @@
 		waveRaf = requestAnimationFrame(waveTick)
 		return () => {
 			off?.()
+			offCogScale?.()
 			if (uiRaf) cancelAnimationFrame(uiRaf)
 			if (waveRaf) cancelAnimationFrame(waveRaf)
 			if (gotoTimer != null) clearTimeout(gotoTimer)
+			if (cogScaleTimer != null) clearTimeout(cogScaleTimer)
 		}
 	})
 </script>
@@ -526,6 +638,20 @@
 								{p.k} {pct(p.v)}
 							</span>
 						</div>
+					</div>
+				{/each}
+			</div>
+			<div class="grid grid-cols-5 gap-2 w-full shrink-0 font-mono text-xs tabular-nums">
+				{#each [
+					{ k: "Id", v: `${idA.toFixed(3)} A`, ink: "text-warning" },
+					{ k: "Iq", v: `${iqA.toFixed(3)} A`, ink: "text-error" },
+					{ k: "Iq*", v: `${iqRefA.toFixed(3)} A`, ink: "text-success" },
+					{ k: "Vbus", v: `${vbusV.toFixed(2)} V`, ink: "" },
+					{ k: "Uq", v: uq.toFixed(3), ink: "text-secondary" },
+				] as p}
+					<div class="rounded-box bg-base-300 px-2 py-1.5 text-center select-none">
+						<div class="opacity-50 text-[10px] leading-none mb-0.5 {p.ink}">{p.k}</div>
+						<div class="text-sm leading-none">{p.v}</div>
 					</div>
 				{/each}
 			</div>
@@ -609,7 +735,7 @@
 			<span class="font-mono text-xs opacity-40 shrink-0">seq {seq}</span>
 			<div class="flex flex-1 min-w-0 gap-1">
 				{#each modes as m}
-					{@const active = mode === m.id}
+					{@const active = "stateIds" in m ? m.stateIds.includes(mode as never) : mode === m.id}
 					<button
 						type="button"
 						class="btn btn-sm flex-1 min-w-0 px-0.5 font-mono text-[10px] leading-none"
@@ -621,7 +747,7 @@
 						disabled={!connected || busy || (!m.cmd && !active)}
 						onclick={() => m.cmd && send(m.cmd)}
 					>
-						{m.label}
+						{"stateIds" in m && active ? alignLabels[mode] : m.label}
 					</button>
 				{/each}
 			</div>
@@ -656,6 +782,20 @@
 			</label>
 			<button class="btn btn-sm" disabled={!connected || busy} onclick={applyK}>SET_K</button>
 			<button class="btn btn-sm" disabled={!connected || busy} onclick={applyRest}>SET_REST</button>
+			<label class="flex items-center gap-2 text-sm grow min-w-[240px] max-w-md">
+				<span class="opacity-70 whitespace-nowrap">COG {(cogScaleX1000 / 10).toFixed(0)}%</span>
+				<input
+					type="range"
+					class="range range-sm range-secondary grow"
+					min="0"
+					max="2000"
+					step="10"
+					bind:value={cogScaleX1000}
+					disabled={!connected || busy}
+					oninput={queueCogScale}
+					title="Cogging compensation scale (runtime only)"
+				/>
+			</label>
 		</div>
 	</footer>
 </main>

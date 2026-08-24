@@ -1,4 +1,17 @@
-export type WaveSample = { t: number; a: number; b: number; c: number }
+export type WaveSample = {
+	t: number
+	a: number
+	b: number
+	c: number
+	id: number
+	iq: number
+	iqRef: number
+	uq: number
+}
+
+export type DutyKey = "a" | "b" | "c"
+export type CurKey = "id" | "iq" | "iqRef" | "uq"
+export type WaveKey = DutyKey | CurKey
 
 /** Visible strip length in device-seq units (~1 ms/tick at 1 kHz). */
 export const WINDOW_MS = 6000
@@ -114,11 +127,15 @@ function catmull(p0: number, p1: number, p2: number, p3: number, u: number): num
 	return 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u2 + (-p0 + 3 * p1 - 3 * p2 + p3) * u3)
 }
 
-function ch(s: WaveSample, key: "a" | "b" | "c"): number {
+function ch(s: WaveSample, key: WaveKey): number {
 	return s[key]
 }
 
-export function sampleAt(samples: WaveSample[], t: number, key: "a" | "b" | "c"): number {
+function isDuty(key: WaveKey): key is DutyKey {
+	return key === "a" || key === "b" || key === "c"
+}
+
+export function sampleAt(samples: WaveSample[], t: number, key: WaveKey): number {
 	const n = samples.length
 	if (n === 0) return 0
 	if (t <= samples[0].t) return ch(samples[0], key)
@@ -137,7 +154,8 @@ export function sampleAt(samples: WaveSample[], t: number, key: "a" | "b" | "c")
 	const u = span <= 0 ? 1 : (t - p1.t) / span
 	const p0 = samples[Math.max(0, lo - 1)]
 	const p3 = samples[Math.min(n - 1, hi + 1)]
-	return Math.min(1, Math.max(0, catmull(ch(p0, key), ch(p1, key), ch(p2, key), ch(p3, key), u)))
+	const v = catmull(ch(p0, key), ch(p1, key), ch(p2, key), ch(p3, key), u)
+	return isDuty(key) ? Math.min(1, Math.max(0, v)) : v
 }
 
 /**
@@ -148,7 +166,7 @@ export function rangeIn(
 	samples: WaveSample[],
 	t0: number,
 	t1: number,
-	key: "a" | "b" | "c",
+	key: WaveKey,
 ): { min: number; max: number } {
 	if (t1 < t0) {
 		const tmp = t0
@@ -180,10 +198,23 @@ export function rangeIn(
 		if (v > hi) hi = v
 		i++
 	}
-	return {
-		min: Math.min(1, Math.max(0, lo)),
-		max: Math.min(1, Math.max(0, hi)),
+	if (isDuty(key)) {
+		return {
+			min: Math.min(1, Math.max(0, lo)),
+			max: Math.min(1, Math.max(0, hi)),
+		}
 	}
+	return { min: lo, max: hi }
+}
+
+/** Peak |Id|/|Iq|/|IqRef| over [t0,t1] for bipolar Y scale (never below floor). */
+export function currentAmpScale(samples: WaveSample[], t0: number, t1: number, floor = 0.2): number {
+	let peak = floor
+	for (const key of ["id", "iq", "iqRef"] as const) {
+		const { min, max } = rangeIn(samples, t0, t1, key)
+		peak = Math.max(peak, Math.abs(min), Math.abs(max))
+	}
+	return peak
 }
 
 /** Seq ticks ≈ ms. Δmrad/Δt = rad/s → RPM. */
