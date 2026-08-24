@@ -49,6 +49,10 @@ func (a *AppService) Connect(id string) error {
 		if a.app != nil {
 			a.app.Event.Emit("telemetry", snap)
 		}
+	}, func(event usb.ModeCogScaleEvent) {
+		if a.app != nil {
+			a.app.Event.Emit("cog-scale", event)
+		}
 	})
 	if err != nil {
 		return err
@@ -140,6 +144,16 @@ func (a *AppService) SetRest() error {
 		return err
 	}
 	return sess.SendCommand(usb.CmdSetRest)
+}
+
+// SetCogScale sets the runtime cogging feed-forward scale (0…2000 = 0…2).
+func (a *AppService) SetCogScale(scaleX1000 uint16) error {
+	sess, err := a.sessionOrErr()
+	if err != nil {
+		return err
+	}
+	pkt := usb.PackCogScale(scaleX1000)
+	return sess.SendCommand(pkt[0], pkt[1:]...)
 }
 
 func (a *AppService) IsFrameless() bool {

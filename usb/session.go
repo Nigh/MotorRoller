@@ -17,10 +17,21 @@ const (
 
 // TelemPoint is one USB telemetry sample for the waveform strip.
 type TelemPoint struct {
-	Seq   uint16  `json:"seq"`
-	DutyA float64 `json:"dutyA"`
-	DutyB float64 `json:"dutyB"`
-	DutyC float64 `json:"dutyC"`
+	Seq    uint16  `json:"seq"`
+	DutyA  float64 `json:"dutyA"`
+	DutyB  float64 `json:"dutyB"`
+	DutyC  float64 `json:"dutyC"`
+	IdA    float64 `json:"idA"`
+	IqA    float64 `json:"iqA"`
+	IqRefA float64 `json:"iqRefA"`
+	Uq     float64 `json:"uq"`
+}
+
+func telemPoint(t Telemetry) TelemPoint {
+	return TelemPoint{
+		Seq: t.Seq, DutyA: t.DutyA, DutyB: t.DutyB, DutyC: t.DutyC,
+		IdA: t.IdA, IqA: t.IqA, IqRefA: t.IqRefA, Uq: t.Uq,
+	}
 }
 
 // Snapshot is a throttled UI push: latest status + dense points since last emit.
@@ -31,6 +42,9 @@ type Snapshot struct {
 
 // EmitFn is called with UI snapshots (~50 Hz).
 type EmitFn func(Snapshot)
+
+// CogScaleEmitFn is called when the device reports a mode cogging scale.
+type CogScaleEmitFn func(ModeCogScaleEvent)
 
 // Session owns one open Vendor Bulk connection.
 type Session struct {
@@ -44,7 +58,8 @@ type Session struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	emit EmitFn
+	emit         EmitFn
+	emitCogScale CogScaleEmitFn
 
 	// latest telemetry for throttled emit
 	histMu  sync.Mutex
@@ -54,7 +69,7 @@ type Session struct {
 }
 
 // Connect opens the device identified by "bus:addr" and starts the read loop.
-func Connect(id string, emit EmitFn) (*Session, error) {
+func Connect(id string, emit EmitFn, emitCogScale CogScaleEmitFn) (*Session, error) {
 	var bus, addr int
 	if _, err := fmt.Sscanf(id, "%d:%d", &bus, &addr); err != nil {
 		return nil, fmt.Errorf("invalid device id %q: want bus:addr", id)
@@ -172,13 +187,14 @@ func Connect(id string, emit EmitFn) (*Session, error) {
 	}
 
 	s := &Session{
-		ctx:  usbCtx,
-		dev:  dev,
-		intf: claimed,
-		done: done,
-		in:   inEP,
-		out:  outEP,
-		emit: emit,
+		ctx:          usbCtx,
+		dev:          dev,
+		intf:         claimed,
+		done:         done,
+		in:           inEP,
+		out:          outEP,
+		emit:         emit,
+		emitCogScale: emitCogScale,
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
@@ -209,6 +225,12 @@ func (s *Session) readLoop(ctx context.Context) {
 			}
 		}
 		data := buf[:n]
+		if event, ok := ParseModeCogScaleEvent(data); ok {
+			if s.emitCogScale != nil {
+				s.emitCogScale(event)
+			}
+			continue
+		}
 		if IsAck(data) {
 			continue
 		}
@@ -219,9 +241,7 @@ func (s *Session) readLoop(ctx context.Context) {
 		s.histMu.Lock()
 		s.latest = t
 		s.have = true
-		s.pending = append(s.pending, TelemPoint{
-			Seq: t.Seq, DutyA: t.DutyA, DutyB: t.DutyB, DutyC: t.DutyC,
-		})
+		s.pending = append(s.pending, telemPoint(t))
 		if len(s.pending) > maxPending {
 			s.pending = append([]TelemPoint(nil), s.pending[len(s.pending)-maxPending/2:]...)
 		}
@@ -251,9 +271,7 @@ func (s *Session) emitLoop(ctx context.Context) {
 			s.pending = nil
 			s.histMu.Unlock()
 			if len(pts) == 0 {
-				pts = []TelemPoint{{
-					Seq: t.Seq, DutyA: t.DutyA, DutyB: t.DutyB, DutyC: t.DutyC,
-				}}
+				pts = []TelemPoint{telemPoint(t)}
 			}
 			s.emit(Snapshot{Telemetry: t, Points: pts})
 		}
