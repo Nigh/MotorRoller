@@ -80,7 +80,7 @@ func (a *AppService) ConnectedID() string {
 	return a.connID
 }
 
-// SendCommand sends a TinyKnob opcode by name: START, STOP, SPRING, SPIN, TEST, STRESS, UPLOAD.
+// SendCommand sends a TinyKnob opcode by name: START, STOP, SPRING, SPIN, TEST, STRESS, GEAR, UPLOAD.
 func (a *AppService) SendCommand(name string) error {
 	var cmd byte
 	switch name {
@@ -96,6 +96,8 @@ func (a *AppService) SendCommand(name string) error {
 		cmd = usb.CmdTest
 	case "STRESS":
 		cmd = usb.CmdStress
+	case "GEAR":
+		cmd = usb.CmdGear
 	case "UPLOAD":
 		cmd = usb.CmdUpload
 	default:

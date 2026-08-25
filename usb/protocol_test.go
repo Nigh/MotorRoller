@@ -128,6 +128,9 @@ func TestModePos(t *testing.T) {
 	if ModeName(11) != "MOTOR_COG_CAL" {
 		t.Fatal(ModeName(11))
 	}
+	if ModeName(12) != "MOTOR_GEAR" {
+		t.Fatal(ModeName(12))
+	}
 }
 
 func TestCmdUpload(t *testing.T) {
@@ -136,5 +139,8 @@ func TestCmdUpload(t *testing.T) {
 	}
 	if CmdStress != 0x07 {
 		t.Fatalf("STRESS opcode %02x", CmdStress)
+	}
+	if CmdGear != 0x0A {
+		t.Fatalf("GEAR opcode %02x", CmdGear)
 	}
 }

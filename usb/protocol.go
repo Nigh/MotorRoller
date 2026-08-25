@@ -29,6 +29,7 @@ const (
 	CmdTest        = 0x05
 	CmdGoto        = 0x06
 	CmdStress      = 0x07
+	CmdGear        = 0x0A
 	CmdSetK        = 0x20
 	CmdSetRest     = 0x21
 	CmdSetCogScale = 0x22
@@ -84,6 +85,8 @@ func ModeName(mode uint8) string {
 		return "MOTOR_STRESS"
 	case 11:
 		return "MOTOR_COG_CAL"
+	case 12:
+		return "MOTOR_GEAR"
 	default:
 		return fmt.Sprintf("UNKNOWN_%d", mode)
 	}

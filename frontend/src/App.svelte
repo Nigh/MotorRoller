@@ -115,6 +115,7 @@
 		{ id: 8, name: "MOTOR_FAULT", label: "FAULT", cmd: null },
 		{ id: 9, name: "MOTOR_POS", label: "POS", cmd: null },
 		{ id: 10, name: "MOTOR_STRESS", label: "STRESS", cmd: "STRESS" },
+		{ id: 12, name: "MOTOR_GEAR", label: "GEAR", cmd: "GEAR" },
 	] as const
 	const alignLabels = ["ALIGN", "ALIGN_RAMP", "ALIGN_HOLD", "DIR_PULSE", "ALIGN_DOWN"] as const
 	const connected = $derived(connectedId !== "")
